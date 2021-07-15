@@ -1,0 +1,18 @@
+{
+    "lists" : {
+        "Inbox" : ["entry 1", "entry 2", "entry 3", "entry 4", "etc", "thing"], 
+        "Next Actions" : ["thing 1", "thing 2"], 
+        "Waiting For": ["cool stuff", "wow moment"], 
+        "Scheduled": ["flushe", "swiggy", "swaggy"], 
+        "Someday": [], 
+        "Projects": ["hmmm"], 
+        "Reference": ["do this", "do that", "do a lot of stuffage"]
+        
+    },
+
+    "settings" : {
+        "do_this": true,
+        "have_this" : false
+    }
+}
+
