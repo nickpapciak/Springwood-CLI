@@ -1,12 +1,7 @@
-use std::{
-    io,
-    sync::mpsc,
-    thread,
-    time::{Duration, Instant},
-};
+use std::io;
 
 use crossterm::{
-    event::{self, Event as CEvent, KeyCode},
+    event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 
@@ -19,40 +14,7 @@ use tui::{
 mod interface;
 use interface::{Copyright, Entries, Lists};
 
-enum Event<I> {
-    Input(I),
-    Tick,
-}
-
-// creates a new thread to tick and capture input
-fn spawn_input_loop(thread_rate: Duration) -> mpsc::Receiver<Event<event::KeyEvent>> {
-    let (tx, rx) = mpsc::channel();
-    let tick_rate = thread_rate;
-    thread::spawn(move || {
-        let mut last_tick = Instant::now();
-        loop {
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| Duration::from_secs(0));
-
-            if event::poll(timeout).expect("poll works") {
-                if let CEvent::Key(key) = event::read().expect("can read events") {
-                    tx.send(Event::Input(key)).expect("can send events");
-                }
-            }
-
-            if last_tick.elapsed() >= tick_rate && tx.send(Event::Tick).is_ok() {
-                last_tick = Instant::now();
-            }
-        }
-    });
-    rx
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // spawns input loop and gets recieving channel
-    let rx = spawn_input_loop(Duration::from_millis(200));
-
     // prepares the terminal for use
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
@@ -65,7 +27,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data: serde_json::Value =
         serde_json::from_str(&db_file[..]).expect("File not formatted correctly");
 
-    
     let mut menu = Lists::default();
     let mut entry = Entries::default();
     let copyright = Copyright::from("Springwood CLI 2021 - all rights reserved");
@@ -86,10 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .as_ref(),
                 )
                 .split(size);
-            
+
             // retrieves lists and saves them to display on the menu
             menu.lists = data["lists"].as_object().unwrap().keys().cloned().collect();
-            
+
             // retrieves the entries and sets the `entry` variable to them
             entry.entries = data["lists"]
                 .get(menu.repr())
@@ -111,16 +72,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
 
         // event recognition
-        match rx.recv()? {
-            Event::Input(event) => match event.code {
-                KeyCode::Char('q') | KeyCode::Char('Q') => {
-                    disable_raw_mode()?;
-                    terminal.set_cursor(0, 0)?;
-                    terminal.show_cursor()?;
-                    terminal.clear()?;
-                    println!();
-                    break;
-                }
+        if let Event::Key(key) = event::read()? {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => break,
                 KeyCode::Left => {
                     menu.previous();
                     entry.select(0);
@@ -129,17 +83,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     menu.next();
                     entry.select(0);
                 }
-                KeyCode::Up => {
-                    entry.previous();
-                }
-                KeyCode::Down => {
-                    entry.next();
-                }
+                KeyCode::Up => entry.previous(),
+                KeyCode::Down => entry.next(),
                 _ => {}
-            },
-            Event::Tick => {}
+            }
         }
     }
+
+    disable_raw_mode()?;
+    terminal.set_cursor(0, 0)?;
+    terminal.show_cursor()?;
+    terminal.clear()?;
+    println!();
+
     Ok(())
 }
 
