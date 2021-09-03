@@ -11,6 +11,34 @@ use tui::{
     Terminal,
 };
 
+
+// TOOD: make `Chunks` more advanced by having it store a list of layouts and having a split that takes in a size/vertical. 
+// Basically improve tui's layout functionality 
+struct Chunks {
+    layout: Vec<tui::layout::Rect>,
+    size: tui::layout::Rect,
+}
+
+impl Chunks {
+    fn set_size(&mut self, size: tui::layout::Rect, direction : Direction, constraints: Vec<Constraint>) {
+        self.layout = Layout::default()
+            .direction(direction)
+            .margin(2)
+            .constraints(constraints,
+            ).split(size);
+        self.size = size;
+    }
+}
+
+impl Default for Chunks {
+    fn default() -> Self {
+        Chunks {
+            layout: Layout::default().split(tui::layout::Rect::default()),
+            size: tui::layout::Rect::default(),
+        }
+    }
+}
+
 mod interface;
 use interface::{Copyright, Entries, Lists};
 
@@ -30,23 +58,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut menu = Lists::default();
     let mut entry = Entries::default();
     let copyright = Copyright::from("Springwood CLI 2021 - all rights reserved");
-
+    let mut chunks = Chunks::default();
+    let mut side_test = Chunks::default();
+    let mut side_open = false;
+    
     loop {
         terminal.draw(|rect| {
             // gets terminal size and splits it into vertical chunks
-            let size = rect.size();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(2)
-                .constraints(
-                    [
-                        Constraint::Length(3),
-                        Constraint::Min(2),
-                        Constraint::Length(3),
-                    ]
-                    .as_ref(),
-                )
-                .split(size);
+
+
+            chunks.set_size(rect.size(), Direction::Vertical, [
+                Constraint::Length(3),
+                Constraint::Min(2),
+                Constraint::Length(3)].into());
+                
+            if side_open {
+                side_test.set_size(chunks.layout[1], Direction::Horizontal, [Constraint::Percentage(50),Constraint::Percentage(50)].into());
+            } else {
+                side_test.set_size(chunks.layout[1], Direction::Horizontal, [Constraint::Percentage(100)].into());
+            }
 
             // retrieves lists and saves them to display on the menu
             menu.lists = data["lists"].as_object().unwrap().keys().cloned().collect();
@@ -62,13 +92,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
 
             // renders the widgets
-            rect.render_widget(menu.render_menu(), chunks[0]);
+            rect.render_widget(menu.render_menu(), chunks.layout[0]);
             rect.render_stateful_widget(
                 entry.render_entries(menu.repr()),
-                chunks[1],
+                side_test.layout[0],
                 &mut entry.state.clone(),
             );
-            rect.render_widget(copyright.render_copyright(), chunks[2]);
+
+            if side_open {
+                rect.render_widget(copyright.render_copyright(), side_test.layout[1]);
+            }
+        
+            rect.render_widget(copyright.render_copyright(), chunks.layout[2]);
         })?;
 
         // event recognition
@@ -85,6 +120,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 KeyCode::Up => entry.previous(),
                 KeyCode::Down => entry.next(),
+                KeyCode::Enter => {
+                    side_open = !side_open;
+                }
                 _ => {}
             }
         }
